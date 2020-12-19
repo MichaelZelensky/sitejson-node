@@ -1,0 +1,16 @@
+{
+  "name": "sitejson",
+  "version": "0.0.1",
+  "description": "SiteXML core module for site.json",
+  "main": "index.js",
+  "repository": "https://github.com/MichaelZelensky/sitejson-node",
+  "author": "Michael Zelensky <michaelzelensky@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@types/fs-extra": "^9.0.5",
+    "fs-extra": "^9.0.1"
+  }
+}

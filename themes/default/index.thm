@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+    <head>
+        <title><%TITLE%></title>
+        <%META%>
+    </head>
+
+    <style>
+    footer {
+        font-size: smaller;
+    }
+    </style>
+    
+    <body>
+        <header><h1><%NAME%></h1></header>
+        <div>
+            <aside><%NAVI%></aside>
+            <div class="main"><%CONTENT(main)%></div>
+        </div>
+        <footer>SiteXML Engine, blank theme. You are seeing this page layout bacause you have not specified or misconfigured page template.</footer>
+    </body>
+</html>
