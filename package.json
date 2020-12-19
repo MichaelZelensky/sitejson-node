@@ -1,5 +1,5 @@
 {
-  "name": "sitejson",
+  "name": "sitexml-json",
   "version": "0.0.1",
   "description": "SiteXML core module for site.json",
   "main": "index.js",
