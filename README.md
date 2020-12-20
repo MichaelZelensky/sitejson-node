@@ -1,4 +1,4 @@
-# sitejson-node
+# SiteXML core module for site.json (Expressjs middleware)
 
 ## Installation
 
@@ -10,7 +10,7 @@ Create `index.js`:
 
 ```
 const express = require('express')
-const sitejson = require('sitejson')
+const sitejson = require('sitexml-json')
 
 var app = express()
 

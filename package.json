@@ -1,7 +1,7 @@
 {
   "name": "sitexml-json",
   "version": "0.0.1",
-  "description": "SiteXML core module for site.json",
+  "description": "SiteXML core module for site.json implemented as Express.js middleware",
   "main": "index.js",
   "repository": "https://github.com/MichaelZelensky/sitejson-node",
   "author": "Michael Zelensky <michaelzelensky@gmail.com>",

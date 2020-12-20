@@ -1,6 +1,6 @@
 /**
  * 
- * SiteXML  Engine for site.json
+ * SiteXML Engine for site.json
  *
  * (c) Michael Zelensky 2020
  */
@@ -9,7 +9,6 @@ import * as fs from 'fs-extra'
 import * as path from 'path'
 import * as _URL from 'url'
 import { SiteXMLMeta, SiteXMLPage, SiteXMLSite, SiteXMLTheme } from '../@types/sitexml'
-// import { config } from 'process'
 
 type Command = {
     start: number,
@@ -31,18 +30,7 @@ const systemDefaultTheme: SiteXMLTheme = {
 const SiteXML: any = {
     publicDir: "../../../public",
     filename: 'site.json',
-    // path: '/',
-    // xml: '',
-    // encoding: "utf8",
-    // xmldoc: null,
-    // processor,
-    // currentPID: null,
-    // basePath: null,
-    // publicDir: '../../public',
-    silentMode: false,
-    // sitexml,
-    // url,
-    // path: Path
+    silentMode: false
 }
 // const generatedSitesBasePath = path.join('.', 'generated-sites')
 
@@ -62,7 +50,6 @@ SiteXML.setPath = function(sitePath: string) {
     var fullpath = path.join(__dirname, sitePath, this.filename)
     if (!fs.existsSync(fullpath)) {
         this.error(`Path doesn't exist (${fullpath})`)
-        //process.exit()
     } else {
         SiteXML.path = sitePath
     }
@@ -72,7 +59,6 @@ SiteXML.setPath = function(sitePath: string) {
  * Returns Site Object
  */
 SiteXML.getSiteJson = () => {
-    /* @ts-ignore: 'this' possibly undefined */
     const dir = path.join(__dirname, SiteXML.path);
     let json
     try {
@@ -358,10 +344,8 @@ SiteXML.replaceCommands = (html: string, parsedTheme: Command[], siteObj: SiteXM
 
 // SiteXML.renderSite = (id: string, url: string) => {
 SiteXML.renderSite = (url: string) => {
-    // const id = "public" //temporary, maybe path will need to be in config or somewhere else
     const siteObj = SiteXML.getSiteJson()
     //replace site id in rootpath; express-site-specific
-    // if (siteObj.rootpath) siteObj.rootpath = siteObj.rootpath.replace("__id", id)
     const pageObj = SiteXML.getPageObj(siteObj, url)
     if (!pageObj) return null
     const themeObj = SiteXML.getThemeObj(pageObj, siteObj)
@@ -408,10 +392,8 @@ SiteXML.say = function(what) {
 
 SiteXML.handler = function(req, res, next) {
     var sitejson = require('./sitejson')
-    // var path = require('path')
     var xml
     var url_parts = _URL.parse(req.url, true)
-    // var pathname = url_parts.pathname
     var query = url_parts.query
     var html
   
@@ -428,20 +410,6 @@ SiteXML.handler = function(req, res, next) {
         res.send(xml)
       } else
   
-      //?id=X
-    //   if (query.id !== undefined) {
-    //     if (query.name !== undefined) {
-    //       sitejson.say(`GET ?id=${query.id}&name=${query.name}`)
-    //       html = sitejson.getContentByNameAndPageId(query.name, query.id)
-    //     } else {
-    //       sitejson.currentPID = query.id
-    //       sitejson.say(`GET ?id=${query.id}`)
-    //       html = sitejson.getPageById(query.id)
-    //     }
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   } else
-  
       //?cid=X
       if (query.cid !== undefined) {
         sitejson.say(`GET ?cid=${query.cid}`)
@@ -450,174 +418,19 @@ SiteXML.handler = function(req, res, next) {
         res.send(html)
       } else
   
-    //   //?login
-    //   if (query.login !== undefined) {
-    //     sitejson.say(`GET ?login`)
-    //     html = fs.readFileSync(path.join(__dirname, '_login.html'))
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   } else
-  
-    //   //?logout
-    //   if (query.logout !== undefined) {
-    //     sitejson.say(`GET ?logout`)
-    //     html = 'logged out'
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   } else
-  
       //all other
       {
-        // sitejson.say(`GET ${pathname}`)
-        // var page = sitejson.getPageNodeByAlias(pathname)
-        // if (page) {
-        //   sitejson.currentPID = page.getAttribute('id')
-        //   html = sitejson.getPageHTMLByPageNode(page)
-        //   res.set('Content-Type', 'text/html')
-        //   res.send(html)
-        // }
 
         sitejson.say("GET " + req.url)
-        // authorized?
-        // // if (!siteBelongsToUser(req)) {
-        // //     res.status(401).sendFile(path.join(__dirname, "html", "401.html"))
-        // //     return
-        // // }
-        // // let id = getSiteId(req)
         const fullURL = new URL(req.url, `http://${req.headers.host}`);
-        // if (!fs.existsSync(path.join(sitesPath, id))) {
-        //     res.status(404).sendFile(file404)
-        // } else {
-            const html = SiteXML.renderSite(fullURL.href)
-            if (html) res.send(html)
-            else res.status(404).end()
-        // }
+        const html = SiteXML.renderSite(fullURL.href)
+        if (html) res.send(html)
+        else res.status(404).end()
 
       }
-    } else
-  
-    //STP POST
-    // if (req.method == "POST") {
-    //   //?login
-    //   if (query.login !== undefined) {
-    //     sitejson.say(`POST ?login=${req.body.login}`)
-    //     var login = req.body.login,      //
-    //         password = req.body.password //note: this requires app.use(express.urlencoded({extended:true})) in the main app file
-    //     var success = sitejson.setSession(login, password)
-    //     if (success) {
-    //       html = "logged in"
-    //     } else
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   } else
-  
-    //   // ?cid
-    //   if (req.body.cid !== undefined) {
-    //     sitejson.say(`POST ?cid=${req.body.cid}`)
-    //     var content = req.body.content
-    //     if (sitejson.updateContent(req.body.cid, content)) {
-    //       html = "content saved"
-    //     } else {
-    //       html = "error saving content"
-    //     }
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   } else
-  
-    //   // ?xml
-    //   if (req.body.sitexml !== undefined) {
-    //     sitejson.say('POST ?sitexml')
-    //     if (sitejson.updateXML(req.body.sitexml)) {
-    //       html = "sitexml saved"
-    //     } else {
-    //       html = "error saving sitexml"
-    //     }
-    //     res.set('Content-Type', 'text/html')
-    //     res.send(html)
-    //   }
-    // }
+    }
   
     next()
   }
-
-// SiteXML.deleteContent = (id: string, files: string[]) => {
-//     const dir = SiteXML.getContentDir(id)
-//     files.forEach((file: string) => {
-//         fs.unlink(path.join(dir, file), (err: any) => {
-//             const filepath = path.join(dir, file)
-//             if (err) console.log("Error removing file ", filepath, err)
-//             else console.log("Removed file ", filepath)
-//         })
-//     })
-// }
-
-/**
- * Generates page for static site (publish via FTP)
- */
-// SiteXML.generatePage = (id: string, pageObj: SiteXMLPage, siteObj: SiteXMLSite) => {
-//     const themeObj = SiteXML.getThemeObj(pageObj, siteObj)
-//     const themeStr = SiteXML.getThemeStr(id, themeObj)
-//     //replace SiteXML macrocommands in theme
-//     const parsedTheme: Command[] = SiteXML.parseTheme(themeStr)
-//     let html = SiteXML.replaceCommands(id, themeStr, parsedTheme, siteObj, themeObj, pageObj)
-//     //replace macrocommands in placed content
-//     const parsedPage: Command[] = SiteXML.parseTheme(html)
-//     html = SiteXML.replaceCommands(id, html, parsedPage, siteObj, themeObj, pageObj)
-//     return html
-// }
-
-/**@todo copy only what is needed */
-// SiteXML.copyThemes = (id: string, basepath: string) => {
-//     const source = path.join(rootDir, id, 'themes')
-//     const target = path.join(basepath, 'themes')
-//     try {
-//         fs.copySync(source, target)
-//     } catch (err) {
-//         console.log(`Error copying dir ${source} -> ${target}`)
-//     }
-// }
-
-/**
- * Recursive
- * @param id
- * @param pageObj
- * @param siteObj
- */
-/**@todo create a start page in the site root */
-// SiteXML.generateStaticSite = (id: string, pageObj?: SiteXMLPage, siteObj?: SiteXMLSite) => {
-//     const basepath = path.join(generatedSitesBasePath, `${id}`)
-//     //first (entry) recursion
-//     if (!siteObj) {
-//         SiteXML.copyThemes(id, basepath)
-//         siteObj = SiteXML.getSiteJson(id)
-//         if (siteObj) siteObj.rootpath = ""
-//     }
-//     if (!siteObj) throw (new Error("SiteObj not defined"))
-//     //iterate pages
-//     let pages
-//     if (pageObj) pages = pageObj.pages
-//     else pages = siteObj.pages
-//     if (!pages) return
-//     for (let i = 0; i < pages.length; i++) {
-//         /**@todo review path, it may be undefined */
-//         const dirpath = path.join(basepath, pages[i].path || "")
-
-//         //make dir
-//         fs.mkdirSync(dirpath, {recursive: true})
-//         const filepath = path.join(basepath, pages[i].path || "", 'index.html')
-//         const html = SiteXML.generatePage(id, pages[i], siteObj)
-
-//         //write page file
-//         try {
-//             fs.writeFileSync(filepath, html)
-//         } catch (e) {
-//             console.log("Error writing file", filepath, e)
-//         }
-
-//         //recursion
-//         SiteXML.generateStaticSite(id, pages[i], siteObj)
-//     }
-    
-// }
 
 module.exports = SiteXML.init()
