@@ -8,7 +8,7 @@
 import * as fs from 'fs-extra'
 import * as path from 'path'
 import * as _URL from 'url'
-import { SiteXMLMeta, SiteXMLPage, SiteXMLSite, SiteXMLTheme } from '../@types/sitexml'
+import { SiteXMLModule, ModuleJson, SiteXMLContent, SiteXMLMeta, SiteXMLPage, SiteXMLSite, SiteXMLTheme } from '../@types/sitexml'
 
 type Command = {
     start: number,
@@ -30,12 +30,20 @@ const systemDefaultTheme: SiteXMLTheme = {
 const SiteXML: any = {
     publicDir: "../../../public",
     filename: 'site.json',
-    silentMode: false
+    silentMode: false,
+    modulesDir: "../../../site_modules"
 }
 // const generatedSitesBasePath = path.join('.', 'generated-sites')
 
 //max count of recurrent parsing macrocommands while rendering a page
 const maxParseCount = 3
+
+const moduleDependenciesPath = "~module_dependencies"
+const moduleActionsPath      = "~module_actions"
+
+// modules
+const frontendModules: any = {}
+const backendModules: any = {}
 
 SiteXML.init = function(opt: Opt = {}) {
     if (opt.publicDir) this.publicDir = opt.publicDir
@@ -93,10 +101,53 @@ SiteXML.getContent = (page: string) => {
     return {content, status: 200}
 }
 
+// get specific module instance settings from siteObj.modules
+SiteXML.getModuleInstanceOptions = (siteObj: SiteXMLSite, name: string, instanceId?: string) => {
+    if (!siteObj.modules) return
+
+    // find module by name
+    let module
+    for (let i = 0; i < siteObj.modules.length; i++) {
+        if (siteObj.modules[i].name === name) {
+            module = siteObj.modules[i]
+            break
+        }
+    }
+    if (!module) return
+    
+    //find instance of that module
+    if (!module.instances)        return
+    if (!module.instances.length) return
+    if (!instanceId)              return
+    for (let i = 0; i < module.instances.length; i++) {
+        if (module.instances[i].id === instanceId) {
+            return module.instances[i]
+        }
+    }
+}
+
+// Returns HTML for module dependencies
+/**@todo Should return CSS and JS files in corresponding html tags: SCRIPT or LINK */
+SiteXML.getModuleDependencies = (moduleJson: ModuleJson, siteObj: SiteXMLSite) => {
+    if (!moduleJson.frontend)                     return ""
+    if (!moduleJson.frontend.dependencies)        return ""
+    if (!moduleJson.frontend.dependencies.length) return ""
+    let html = ""
+    // strip traing slash
+    let rootPath = siteObj.rootpath
+    if (rootPath[rootPath.length-1] === "/")  rootPath = rootPath.slice(0, -1)
+    // generate HTML
+    let dependencies = moduleJson.frontend.dependencies
+    for (let i = 0; i < dependencies.length; i++) {
+        html += `<script src="${rootPath}/${moduleDependenciesPath}/${moduleJson.name}/${dependencies[i]}"></script>`
+    }
+    return html
+}
+
 /**
  * Returns content html
  */
-SiteXML.getContentHtml = (pageObj: SiteXMLPage, command: string) => {
+SiteXML.getContentHtml = async (pageObj: SiteXMLPage, command: string, siteObj: SiteXMLSite) => {
     const start = "CONTENT(".length
     //find closing bracket and name of the content zone
     let end = start + 1
@@ -105,17 +156,73 @@ SiteXML.getContentHtml = (pageObj: SiteXMLPage, command: string) => {
     if (!pageObj.content || !pageObj.content.length) return ""
     //search for content with given cz name
     for (let i = 0; i < pageObj.content.length; i++) {
-        if (pageObj.content[i].name?.toLowerCase() === name) {
-            //no file property: continue
-            if (!pageObj.content[i].file) continue
-            //read and return file contents
-            const filepath = SiteXML.getContentDir() + "/" + pageObj.content[i].file
-            try {
-                const html = fs.readFileSync(filepath, 'utf8')
-                return html
-            } catch(e) {
-                console.log("Error reading file", e)
-                return ""
+        let content: SiteXMLContent = pageObj.content[i]
+        if (content.name?.toLowerCase() === name) {
+            // module
+            if (content.type?.toLowerCase() === "module") {
+                if (!content.module) {
+                    SiteXML.error("Module name is not specified")
+                    return ""
+                }
+                
+                // module.json
+                const moduleJsonPath = path.join(__dirname, SiteXML.modulesDir, content.module, "module.json")
+                if (!fs.existsSync(moduleJsonPath)) {
+                    SiteXML.error("Module.json doesn't exists: " + moduleJsonPath)
+                    return ""
+                }
+
+                // read module.json
+                let moduleJson: ModuleJson
+                try {
+                    moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf8'))
+                } catch(e) {
+                    SiteXML.error("Error reading and parsing json file", e)
+                    return ""
+                }
+
+                /**@todo load once for the whole page */
+                const dependenciesHTML = SiteXML.getModuleDependencies(moduleJson, siteObj)
+
+                // load module
+                let module
+                if (frontendModules[content.module]) {
+                    module = frontendModules[content.module]
+                } else {
+                    if (!moduleJson.frontend?.main) {
+                        SiteXML.error("Module frontend main file is not defined")
+                        return ""
+                    }
+                    const filepath = path.join(__dirname, SiteXML.modulesDir, content.module, moduleJson.frontend.main)
+                    if (!fs.existsSync(filepath)) {
+                        SiteXML.error("Module frontend main file doesn't exists: " + filepath)
+                        return ""
+                    }
+                    module = await import(filepath)
+                    frontendModules[content.module] = module
+                }
+                const moduleOptions = SiteXML.getModuleInstanceOptions(siteObj, content.module, content.instanceid)
+                return dependenciesHTML + module.render(moduleOptions, siteObj)
+                
+
+            // text content
+            } else {
+                //no file property: continue
+                if (!content.file) continue
+                //read and return file contents
+                const filepath = path.join(SiteXML.getContentDir(), content.file)
+                if (!fs.existsSync(filepath)) {
+                    SiteXML.error("Content file doesn't exists: " + filepath)
+                    return ""
+                }
+                // read content file
+                try {
+                    const html = fs.readFileSync(filepath, 'utf8')
+                    return html
+                } catch(e) {
+                    SiteXML.error("Error reading file", e)
+                    return ""
+                }
             }
         }
     }
@@ -158,10 +265,10 @@ SiteXML.saveSiteJson = (json: string) => {
 SiteXML.getPageObj = (siteObj: SiteXMLSite, url: string) => {
     /** @todo find and return page that has to be the landing page, using the first page for now */
     const startPage = siteObj.pages?.length ? siteObj?.pages[0] : null
-    const url_parts = _URL.parse(url);
+    const urlParts = _URL.parse(url);
     // Removes everything before page path, e.g. /site/site1/todo
-    if (!url_parts || !url_parts.pathname) return startPage
-    const path = url_parts.pathname.split("/").slice(1).join("/")
+    if (!urlParts || !urlParts.pathname) return startPage
+    const path = urlParts.pathname.split("/").slice(1).join("/")
     if (!path) return startPage
     const page = SiteXML.getPageByPath(siteObj, path)
     if (page) return page
@@ -310,13 +417,14 @@ SiteXML.getThemeFullPath = (siteObj: SiteXMLSite, themeObj: SiteXMLTheme) => {
 /**
  * @returns {String}
  */
-SiteXML.replaceCommands = (html: string, parsedTheme: Command[], siteObj: SiteXMLSite, themeObj: SiteXMLTheme, pageObj: SiteXMLPage) => {
+SiteXML.replaceCommands = async (html: string, parsedTheme: Command[], siteObj: SiteXMLSite, themeObj: SiteXMLTheme, pageObj: SiteXMLPage) => {
     if (!parsedTheme.length) return html
     let newHtml = "", start = 0
     const startPage = SiteXML.getStartPage(siteObj)
     //it should arrive sorted, but let's make sure that it is sorted
     parsedTheme.sort((a, b) => a.start - b.start)
-    parsedTheme.forEach((command: Command) => {
+    for (let i = 0; i < parsedTheme.length; i++) {
+        const command: Command = parsedTheme[i]
         newHtml += html.substring(start, command.start)
         let replaceStr = ""
         if (command.command === "NAVI") {
@@ -333,17 +441,16 @@ SiteXML.replaceCommands = (html: string, parsedTheme: Command[], siteObj: SiteXM
             replaceStr = siteObj.name || ""
         } else if (command.command.substring(0, "CONTENT(".length) === "CONTENT(") {
             //get current page object
-            replaceStr = SiteXML.getContentHtml(pageObj, command.command)
+            replaceStr = await SiteXML.getContentHtml(pageObj, command.command, siteObj)
         }
         if (replaceStr) newHtml += replaceStr
         start = command.end
-    })
+    }
     newHtml += html.substr(start)
     return newHtml
 }
 
-// SiteXML.renderSite = (id: string, url: string) => {
-SiteXML.renderSite = (url: string) => {
+SiteXML.renderSite = async (url: string) => {
     const siteObj = SiteXML.getSiteJson()
     //replace site id in rootpath; express-site-specific
     const pageObj = SiteXML.getPageObj(siteObj, url)
@@ -352,12 +459,12 @@ SiteXML.renderSite = (url: string) => {
     const themeStr = SiteXML.getThemeStr(themeObj)
     //replace SiteXML macrocommands in theme
     const parsedTheme: Command[] = SiteXML.parseTheme(themeStr)
-    let html = SiteXML.replaceCommands(themeStr, parsedTheme, siteObj, themeObj, pageObj)
+    let html = await SiteXML.replaceCommands(themeStr, parsedTheme, siteObj, themeObj, pageObj)
     //replace macrocommands in placed content
     let parseCount = 0
     let parsedPage: Command[] = SiteXML.parseTheme(html)
     while (parsedPage.length && ++parseCount < maxParseCount) {
-        html = SiteXML.replaceCommands(html, parsedPage, siteObj, themeObj, pageObj)
+        html = await SiteXML.replaceCommands(html, parsedPage, siteObj, themeObj, pageObj)
         parsedPage = SiteXML.parseTheme(html)
     }
     return html
@@ -390,46 +497,116 @@ SiteXML.say = function(what) {
     if (!this.silentMode) console.log(what)
 }
 
-SiteXML.handler = function(req, res, next) {
-    var sitejson = require('./sitejson')
-    var xml
-    var url_parts = _URL.parse(req.url, true)
-    var query = url_parts.query
-    var html
-  
-    // STP GET
+// Handles module response for POST and GET
+SiteXML.moduleHandler = async function(req, res, next) {
+    const urlParts = _URL.parse(req.url, true)
+    const pathNameSplit = urlParts.pathname.split("/") 
+    // module name from pathname like: /~module_actions/modulename
+    /**@todo is it possible that the pathname will be without leading slash, e.g. ~module_actions/modulename  */
+    const moduleName = pathNameSplit[2]
+
+    if (!moduleName) res.status(404).end()
+
+    // module.json
+    const moduleJsonPath = path.join(__dirname, SiteXML.modulesDir, moduleName, "module.json")
+    if (!fs.existsSync(moduleJsonPath)) {
+        SiteXML.error("Module.json doesn't exists: " + moduleJsonPath)
+        res.status(500).end()
+    }
+
+    // read module.json
+    let moduleJson: ModuleJson
+    try {
+        moduleJson = JSON.parse(fs.readFileSync(moduleJsonPath, 'utf8'))
+    } catch(e) {
+        SiteXML.error("Error reading and parsing json file", e)
+        res.status(500).end()
+    }
+
+    // load module
+    let module: any
+    if (backendModules[moduleName]) {
+        module = backendModules[moduleName]
+    } else {
+        if (!moduleJson.backend?.main) {
+            SiteXML.error("Module frontend main file is not defined")
+            res.status(500).end()
+        }
+        const filepath = path.join(__dirname, SiteXML.modulesDir, moduleName, moduleJson.backend.main)
+        if (!fs.existsSync(filepath)) {
+            SiteXML.error("Module frontend main file doesn't exists: " + filepath)
+            res.status(500).end()
+        }
+        module = await import(filepath)
+        backendModules[moduleName] = module
+    }
+    module.handler(req, res, next)
+}
+
+SiteXML.handler = async function(req, res, next) {
+    const sitejson = require('./sitejson')
+    const urlParts = _URL.parse(req.url, true)
+    const query = urlParts.query
+    const pathNameSplit = urlParts.pathname.split("/") 
+    let xml: SiteXMLSite
+    let html: string
+
+    /**
+     * STP GET
+     */ 
   
     if (req.method == "GET") {
-  
-      //?sitexml
-      if (query.sitexml !== undefined || query.sitejson !== undefined) {
-        xml = sitejson.getSiteJson()
-        if (query.sitexml) sitejson.say("GET ?sitexml")
-        if (query.sitejson) sitejson.say("GET ?sitejson")
-        res.set({'Content-Type': 'text/json'})
-        res.send(xml)
-      } else
-  
-      //?cid=X
-      if (query.cid !== undefined) {
-        sitejson.say(`GET ?cid=${query.cid}`)
-        html = sitejson.getContentNodeTextContent(sitejson.getContentNodeById(query.cid))
-        res.set('Content-Type', 'text/html')
-        res.send(html)
-      } else
-  
-      //all other
-      {
 
-        sitejson.say("GET " + req.url)
-        const fullURL = new URL(req.url, `http://${req.headers.host}`);
-        const html = SiteXML.renderSite(fullURL.href)
-        if (html) res.send(html)
-        else res.status(404).end()
+        // handle module requests, when pathname is like /~module_actions/...
+        /**@todo is it possible that the pathname will be without leading slash, e.g. ~module_actions/modulename  */
+        if (pathNameSplit[1] === moduleActionsPath) {
+            SiteXML.moduleHandler(req, res, next)
+        } else
 
-      }
+        //?sitexml
+        if (query.sitexml !== undefined || query.sitejson !== undefined) {
+            xml = sitejson.getSiteJson()
+            if (query.sitexml) sitejson.say("GET ?sitexml")
+            if (query.sitejson) sitejson.say("GET ?sitejson")
+            res.set({'Content-Type': 'text/json'})
+            res.send(xml)
+        } else
+
+        //?cid=X
+        if (query.cid !== undefined) {
+            sitejson.say(`GET ?cid=${query.cid}`)
+            html = sitejson.getContentNodeTextContent(sitejson.getContentNodeById(query.cid))
+            res.set('Content-Type', 'text/html')
+            res.send(html)
+        } else
+
+        //all other
+        {
+            sitejson.say("GET " + req.url)
+            const fullURL = new URL(req.url, `http://${req.headers.host}`);
+            const html = await SiteXML.renderSite(fullURL.href)
+            if (html) {
+                res.send(html)
+            } else {
+                res.status(404).end()
+            }
+        }
+    } else 
+
+    /**
+     * STP POST
+     */
+
+    if (req.method == "POST") {
+
+        // handle module requests, when pathname is like /~module_actions/...
+        /**@todo is it possible that the pathname will be without leading slash, e.g. ~module_actions/modulename  */
+        if (pathNameSplit[1] === moduleActionsPath) {
+            SiteXML.moduleHandler(req, res, next)
+        }
+
     }
-  
+
     next()
   }
 
